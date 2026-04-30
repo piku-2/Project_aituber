@@ -1,26 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
+import { GoogleGenAI } from "@google/genai";
 
-const OLLAMA_URL = "http://localhost:11434/api/chat";
-const MODEL = "qwen3:8b";
+const MODEL = "gemini-2.5-flash";
 const SYSTEM_PROMPT = "あなたはAITuberです。フレンドリーに日本語で返答してください。";
+
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
 export async function POST(req: NextRequest) {
   const { messages } = await req.json();
 
-  const res = await fetch(OLLAMA_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: MODEL,
-      messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages],
-      stream: false,
-    }),
+  const history = messages.slice(0, -1).map((m: { role: string; content: string }) => ({
+    role: m.role === "user" ? "user" : "model",
+    parts: [{ text: m.content }],
+  }));
+
+  const lastMessage = messages[messages.length - 1].content as string;
+
+  const chat = ai.chats.create({
+    model: MODEL,
+    config: { systemInstruction: SYSTEM_PROMPT },
+    history,
   });
 
-  if (!res.ok) {
-    return NextResponse.json({ error: "Ollama request failed" }, { status: 502 });
-  }
+  const response = await chat.sendMessage({ message: lastMessage });
 
-  const data = await res.json();
-  return NextResponse.json({ content: data.message.content });
+  return NextResponse.json({ content: response.text });
 }
