@@ -7,15 +7,80 @@ type Message = {
   content: string;
 };
 
+interface ISpeechRecognitionResult {
+  readonly 0: { transcript: string };
+}
+
+interface ISpeechRecognitionEvent extends Event {
+  readonly results: ISpeechRecognitionResult[];
+}
+
+interface ISpeechRecognition extends EventTarget {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  start(): void;
+  stop(): void;
+  onstart: ((this: ISpeechRecognition, ev: Event) => void) | null;
+  onend: ((this: ISpeechRecognition, ev: Event) => void) | null;
+  onresult: ((this: ISpeechRecognition, ev: ISpeechRecognitionEvent) => void) | null;
+  onerror: ((this: ISpeechRecognition, ev: { error: string }) => void) | null;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition: new () => ISpeechRecognition;
+    webkitSpeechRecognition: new () => ISpeechRecognition;
+  }
+}
+
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [listening, setListening] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<ISpeechRecognition | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  function toggleListening() {
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+
+    const SR = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+    if (!SR) {
+      alert("このブラウザはWeb Speech APIに対応していません。");
+      return;
+    }
+
+    const rec = new SR();
+    rec.lang = "ja-JP";
+    rec.interimResults = true;
+    rec.continuous = false;
+
+    rec.onstart = () => setListening(true);
+    rec.onend = () => setListening(false);
+
+    rec.onresult = (e: ISpeechRecognitionEvent) => {
+      const transcript = Array.from(e.results)
+        .map((r: ISpeechRecognitionResult) => r[0].transcript)
+        .join("");
+      setInput(transcript);
+    };
+
+    rec.onerror = (e: { error: string }) => {
+      console.error("SpeechRecognition error:", e.error);
+      setListening(false);
+    };
+
+    recognitionRef.current = rec;
+    rec.start();
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -85,11 +150,22 @@ export default function Home() {
           onSubmit={handleSubmit}
           className="p-3 border-t border-gray-200 flex gap-2"
         >
+          <button
+            type="button"
+            onClick={toggleListening}
+            className={`rounded-full w-10 h-10 flex items-center justify-center text-lg shrink-0 transition-colors ${
+              listening
+                ? "bg-red-500 text-white animate-pulse"
+                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+            }`}
+          >
+            🎤
+          </button>
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="メッセージを入力..."
+            placeholder={listening ? "聞いています..." : "メッセージを入力..."}
             className="flex-1 rounded-full border border-gray-300 bg-gray-50 px-4 py-2 text-base text-gray-900 placeholder-gray-400 outline-none focus:border-blue-400 focus:bg-white"
             disabled={loading}
           />
