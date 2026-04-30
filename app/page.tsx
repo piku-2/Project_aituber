@@ -41,10 +41,45 @@ export default function Home() {
   const [listening, setListening] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
+  const transcriptRef = useRef("");
+  const messagesRef = useRef<Message[]>([]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  async function send(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed || loading) return;
+
+    const userMessage: Message = { role: "user", content: trimmed };
+    const next = [...messagesRef.current, userMessage];
+    setMessages(next);
+    setInput("");
+    transcriptRef.current = "";
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: next }),
+      });
+      const data = await res.json();
+      setMessages([...next, { role: "assistant", content: data.content }]);
+    } catch {
+      setMessages([
+        ...next,
+        { role: "assistant", content: "エラーが発生しました。" },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   function toggleListening() {
     if (listening) {
@@ -64,12 +99,16 @@ export default function Home() {
     rec.continuous = false;
 
     rec.onstart = () => setListening(true);
-    rec.onend = () => setListening(false);
+    rec.onend = () => {
+      setListening(false);
+      send(transcriptRef.current);
+    };
 
     rec.onresult = (e: ISpeechRecognitionEvent) => {
       const transcript = Array.from(e.results)
         .map((r: ISpeechRecognitionResult) => r[0].transcript)
         .join("");
+      transcriptRef.current = transcript;
       setInput(transcript);
     };
 
@@ -84,30 +123,7 @@ export default function Home() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!input.trim() || loading) return;
-
-    const userMessage: Message = { role: "user", content: input.trim() };
-    const next = [...messages, userMessage];
-    setMessages(next);
-    setInput("");
-    setLoading(true);
-
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next }),
-      });
-      const data = await res.json();
-      setMessages([...next, { role: "assistant", content: data.content }]);
-    } catch {
-      setMessages([
-        ...next,
-        { role: "assistant", content: "エラーが発生しました。" },
-      ]);
-    } finally {
-      setLoading(false);
-    }
+    await send(input);
   }
 
   return (
