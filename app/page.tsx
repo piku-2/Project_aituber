@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { voiceConfig } from "@/lib/voiceConfig";
 
 type Message = {
   role: "user" | "assistant";
@@ -97,17 +98,17 @@ export default function Home() {
 
   async function speak(text: string, onProgress: (partial: string) => void): Promise<void> {
     const VOICEVOX = "http://localhost:50021";
-    const SPEAKER = 1;
+    const { speakerId, ...customParams } = voiceConfig;
     try {
       const queryRes = await fetch(
-        `${VOICEVOX}/audio_query?text=${encodeURIComponent(text)}&speaker=${SPEAKER}`,
+        `${VOICEVOX}/audio_query?text=${encodeURIComponent(text)}&speaker=${speakerId}`,
         { method: "POST" }
       );
       if (!queryRes.ok) return;
-      const query: VoicevoxQuery = await queryRes.json();
+      const query: VoicevoxQuery = { ...await queryRes.json(), ...customParams };
       const timeline = buildTimeline(query, text);
 
-      const synthRes = await fetch(`${VOICEVOX}/synthesis?speaker=${SPEAKER}`, {
+      const synthRes = await fetch(`${VOICEVOX}/synthesis?speaker=${speakerId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(query),
