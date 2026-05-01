@@ -34,12 +34,54 @@ declare global {
   }
 }
 
+interface VoicevoxMora {
+  consonant_length?: number;
+  vowel_length: number;
+}
+
+interface VoicevoxAccentPhrase {
+  moras: VoicevoxMora[];
+  pause_mora?: VoicevoxMora;
+}
+
+interface VoicevoxQuery {
+  accent_phrases: VoicevoxAccentPhrase[];
+  prePhonemeLength: number;
+}
+
+function buildTimeline(query: VoicevoxQuery, text: string): { time: number; chars: number }[] {
+  const timeline: { time: number; chars: number }[] = [];
+  let t = query.prePhonemeLength;
+
+  let totalMoras = 0;
+  for (const phrase of query.accent_phrases) {
+    totalMoras += phrase.moras.length;
+    if (phrase.pause_mora) totalMoras++;
+  }
+
+  let moraIdx = 0;
+  for (const phrase of query.accent_phrases) {
+    for (const mora of phrase.moras) {
+      t += (mora.consonant_length ?? 0) + mora.vowel_length;
+      moraIdx++;
+      timeline.push({ time: t, chars: Math.ceil((moraIdx / totalMoras) * text.length) });
+    }
+    if (phrase.pause_mora) {
+      t += (phrase.pause_mora.consonant_length ?? 0) + phrase.pause_mora.vowel_length;
+      moraIdx++;
+    }
+  }
+
+  return timeline;
+}
+
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [listening, setListening] = useState(false);
   const [liveTranscript, setLiveTranscript] = useState("");
+  const [speakingContent, setSpeakingContent] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
   const transcriptRef = useRef("");
@@ -51,9 +93,9 @@ export default function Home() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, liveTranscript]);
+  }, [messages, liveTranscript, speakingContent]);
 
-  async function speak(text: string): Promise<void> {
+  async function speak(text: string, onProgress: (partial: string) => void): Promise<void> {
     const VOICEVOX = "http://localhost:50021";
     const SPEAKER = 1;
     try {
@@ -62,7 +104,8 @@ export default function Home() {
         { method: "POST" }
       );
       if (!queryRes.ok) return;
-      const query = await queryRes.json();
+      const query: VoicevoxQuery = await queryRes.json();
+      const timeline = buildTimeline(query, text);
 
       const synthRes = await fetch(`${VOICEVOX}/synthesis?speaker=${SPEAKER}`, {
         method: "POST",
@@ -76,6 +119,17 @@ export default function Home() {
 
       await new Promise<void>((resolve) => {
         const audio = new Audio(url);
+
+        audio.addEventListener("timeupdate", () => {
+          const ct = audio.currentTime;
+          let chars = 0;
+          for (const entry of timeline) {
+            if (entry.time <= ct) chars = entry.chars;
+            else break;
+          }
+          onProgress(text.slice(0, chars));
+        });
+
         audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
         audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
         audio.play();
@@ -104,7 +158,9 @@ export default function Home() {
         body: JSON.stringify({ messages: next }),
       });
       const data = await res.json();
-      await speak(data.content);
+      setSpeakingContent("");
+      await speak(data.content, (partial) => setSpeakingContent(partial));
+      setSpeakingContent("");
       setMessages([...next, { role: "assistant", content: data.content }]);
     } catch {
       setMessages([
@@ -195,7 +251,15 @@ export default function Home() {
               </div>
             </div>
           )}
-          {loading && (
+          {speakingContent && (
+            <div className="flex justify-start">
+              <div className="max-w-[85%] rounded-2xl px-4 py-2.5 text-base leading-relaxed whitespace-pre-wrap bg-gray-100 text-gray-900 font-medium">
+                {speakingContent}
+                <span className="animate-pulse">▌</span>
+              </div>
+            </div>
+          )}
+          {loading && !speakingContent && (
             <div className="flex justify-start">
               <div className="bg-gray-100 rounded-2xl px-4 py-2.5 text-base text-gray-400 font-medium">
                 入力中...
