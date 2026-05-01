@@ -39,6 +39,7 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [listening, setListening] = useState(false);
+  const [liveTranscript, setLiveTranscript] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
   const transcriptRef = useRef("");
@@ -50,7 +51,39 @@ export default function Home() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, liveTranscript]);
+
+  async function speak(text: string): Promise<void> {
+    const VOICEVOX = "http://localhost:50021";
+    const SPEAKER = 1;
+    try {
+      const queryRes = await fetch(
+        `${VOICEVOX}/audio_query?text=${encodeURIComponent(text)}&speaker=${SPEAKER}`,
+        { method: "POST" }
+      );
+      if (!queryRes.ok) return;
+      const query = await queryRes.json();
+
+      const synthRes = await fetch(`${VOICEVOX}/synthesis?speaker=${SPEAKER}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(query),
+      });
+      if (!synthRes.ok) return;
+
+      const blob = await synthRes.blob();
+      const url = URL.createObjectURL(blob);
+
+      await new Promise<void>((resolve) => {
+        const audio = new Audio(url);
+        audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
+        audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+        audio.play();
+      });
+    } catch (e) {
+      console.error("VOICEVOX error:", e);
+    }
+  }
 
   async function send(text: string) {
     const trimmed = text.trim();
@@ -60,6 +93,7 @@ export default function Home() {
     const next = [...messagesRef.current, userMessage];
     setMessages(next);
     setInput("");
+    setLiveTranscript("");
     transcriptRef.current = "";
     setLoading(true);
 
@@ -70,6 +104,7 @@ export default function Home() {
         body: JSON.stringify({ messages: next }),
       });
       const data = await res.json();
+      await speak(data.content);
       setMessages([...next, { role: "assistant", content: data.content }]);
     } catch {
       setMessages([
@@ -101,6 +136,7 @@ export default function Home() {
     rec.onstart = () => setListening(true);
     rec.onend = () => {
       setListening(false);
+      setLiveTranscript("");
       send(transcriptRef.current);
     };
 
@@ -109,7 +145,7 @@ export default function Home() {
         .map((r: ISpeechRecognitionResult) => r[0].transcript)
         .join("");
       transcriptRef.current = transcript;
-      setInput(transcript);
+      setLiveTranscript(transcript);
     };
 
     rec.onerror = (e: { error: string }) => {
@@ -152,6 +188,13 @@ export default function Home() {
               </div>
             </div>
           ))}
+          {liveTranscript && (
+            <div className="flex justify-end">
+              <div className="max-w-[85%] rounded-2xl px-4 py-2.5 text-base leading-relaxed whitespace-pre-wrap bg-blue-200 text-blue-900 font-medium opacity-70">
+                {liveTranscript}
+              </div>
+            </div>
+          )}
           {loading && (
             <div className="flex justify-start">
               <div className="bg-gray-100 rounded-2xl px-4 py-2.5 text-base text-gray-400 font-medium">
