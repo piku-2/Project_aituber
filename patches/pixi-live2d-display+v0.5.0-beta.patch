@@ -1,0 +1,13 @@
+diff --git a/node_modules/pixi-live2d-display/dist/cubism4.es.js b/node_modules/pixi-live2d-display/dist/cubism4.es.js
+index a272bc8..33de3e7 100644
+--- a/node_modules/pixi-live2d-display/dist/cubism4.es.js
++++ b/node_modules/pixi-live2d-display/dist/cubism4.es.js
+@@ -2284,7 +2284,7 @@ class CubismModel {
+    * @return Drawableの描画順リスト
+    */
+   getDrawableRenderOrders() {
+-    return this._model.drawables.renderOrders;
++    return this._model.renderOrders ?? this._model.drawables.renderOrders;
+   }
+   /**
+    * @deprecated

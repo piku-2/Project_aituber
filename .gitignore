@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Live2D（ライセンスのため個別ダウンロードが必要）
+/public/live2dcubismcore.min.js
+/public/yachiyo/

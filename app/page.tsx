@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { voiceConfig } from "@/lib/voiceConfig";
+
+const Live2DViewer = dynamic(() => import("@/components/Live2DViewer"), { ssr: false });
 
 type Message = {
   role: "user" | "assistant";
@@ -222,8 +225,8 @@ export default function Home() {
   return (
     <div className="flex h-screen bg-gray-100">
       {/* キャラクターエリア（左2/3） */}
-      <div className="flex-1 flex items-center justify-center">
-        <p className="text-gray-400 text-sm">Live2D ここに表示</p>
+      <div className="flex-1">
+        <Live2DViewer />
       </div>
 
       {/* チャットエリア（右1/3） */}
