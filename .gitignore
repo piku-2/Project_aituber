@@ -43,3 +43,10 @@ next-env.d.ts
 # Live2D（ライセンスのため個別ダウンロードが必要）
 /public/live2dcubismcore.min.js
 /public/yachiyo/
+/yachiyo_model/
+
+# Windows Zone.Identifier（WSL環境で生成されるメタデータ）
+*:Zone.Identifier
+
+# モデルzip
+*.zip

@@ -40,17 +40,15 @@ Live2D モデルの描画には Live2D 公式の Cubism Core JS が必要。
 
 ### 3. Live2D モデルの配置
 
-モデルファイルを `public/yachiyo/` に配置する。
+モデルファイルはライセンスの都合により git に含まれていない。チームから別途入手して配置すること。
 
 ```
 public/
   yachiyo/
-    八千代辉夜姬.model3.json
-    八千代辉夜姬.moc3
-    八千代辉夜姬.8192/
-      texture_00.png
-      texture_01.png
-    八千代辉夜姬.physics3.json
+    *.model3.json   ← チームから入手
+    *.moc3
+    *.8192/
+    *.physics3.json
     （その他モデルファイル）
 ```
 
