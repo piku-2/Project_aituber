@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 
 const MODEL_PATH = "/yachiyo/八千代辉夜姬.model3.json";
+const MOUTH_PARAM = "ParamMouthOpenY";
+
+export interface Live2DViewerHandle {
+  setMouthValue: (value: number) => void;
+}
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) {
-      resolve();
-      return;
-    }
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
     const script = document.createElement("script");
     script.src = src;
     script.onload = () => resolve();
@@ -18,8 +20,20 @@ function loadScript(src: string): Promise<void> {
   });
 }
 
-export default function Live2DViewer() {
+const Live2DViewer = forwardRef<Live2DViewerHandle>(function Live2DViewer(_, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const modelRef = useRef<any>(null);
+
+  useImperativeHandle(ref, () => ({
+    setMouthValue: (value: number) => {
+      try {
+        modelRef.current?.internalModel.coreModel.setParameterValueById(MOUTH_PARAM, value);
+      } catch {
+        // パラメータが見つからない場合は無視
+      }
+    },
+  }));
 
   useEffect(() => {
     const container = containerRef.current;
@@ -31,14 +45,11 @@ export default function Live2DViewer() {
 
     (async () => {
       try {
-        // Cubism Core を確実にロードしてから進む
         await loadScript("/live2dcubismcore.min.js");
-
         if (cancelled) return;
 
         const PIXI = await import("pixi.js");
         const { Live2DModel } = await import("pixi-live2d-display/cubism4");
-
         if (cancelled) return;
 
         Live2DModel.registerTicker(PIXI.Ticker);
@@ -46,34 +57,21 @@ export default function Live2DViewer() {
         const w = container.offsetWidth || 800;
         const h = container.offsetHeight || 600;
 
-        app = new PIXI.Application({
-          autoStart: true,
-          backgroundAlpha: 0,
-          width: w,
-          height: h,
-        });
-
+        app = new PIXI.Application({ autoStart: true, backgroundAlpha: 0, width: w, height: h });
         container.appendChild(app.view as HTMLCanvasElement);
 
-        if (cancelled) {
-          app.destroy(true, { children: true });
-          return;
-        }
+        if (cancelled) { app.destroy(true, { children: true }); return; }
 
-        console.log("Loading model:", MODEL_PATH);
         const model = await Live2DModel.from(MODEL_PATH);
-        console.log("Model loaded:", model.width, model.height);
-
         if (cancelled) return;
 
+        modelRef.current = model;
         app.stage.addChild(model);
 
-        // スケール変換の影響を受けない元サイズを取得
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const origW: number = (model as any).internalModel?.originalWidth ?? model.width;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const origH: number = (model as any).internalModel?.originalHeight ?? model.height;
-        console.log("Original model size:", origW, origH);
 
         const fit = () => {
           const sw: number = app.screen.width;
@@ -91,7 +89,7 @@ export default function Live2DViewer() {
           fit();
         });
         resizeObserver.observe(container);
-
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (app as any)._resizeObserver = resizeObserver;
       } catch (e) {
         console.error("Live2D init error:", e);
@@ -100,6 +98,7 @@ export default function Live2DViewer() {
 
     return () => {
       cancelled = true;
+      modelRef.current = null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (app as any)?._resizeObserver?.disconnect();
       app?.destroy(true, { children: true });
@@ -107,4 +106,6 @@ export default function Live2DViewer() {
   }, []);
 
   return <div ref={containerRef} className="w-full h-full" />;
-}
+});
+
+export default Live2DViewer;
