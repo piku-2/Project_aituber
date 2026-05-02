@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { voiceConfig } from "@/lib/voiceConfig";
+import type { Live2DViewerHandle } from "@/components/Live2DViewer";
 
 const Live2DViewer = dynamic(() => import("@/components/Live2DViewer"), { ssr: false });
 
@@ -85,6 +86,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [listening, setListening] = useState(false);
   const [liveTranscript, setLiveTranscript] = useState("");
+  const live2DRef = useRef<Live2DViewerHandle>(null);
   const [speakingContent, setSpeakingContent] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
@@ -124,6 +126,27 @@ export default function Home() {
       await new Promise<void>((resolve) => {
         const audio = new Audio(url);
 
+        // Web Audio で口パク用の音量分析
+        const audioCtx = new AudioContext();
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.6;
+        const source = audioCtx.createMediaElementSource(audio);
+        source.connect(analyser);
+        analyser.connect(audioCtx.destination);
+        const pcmData = new Uint8Array(analyser.frequencyBinCount);
+        let rafId = 0;
+
+        const updateMouth = () => {
+          analyser.getByteTimeDomainData(pcmData);
+          let sum = 0;
+          for (const v of pcmData) sum += (v - 128) ** 2;
+          const rms = Math.sqrt(sum / pcmData.length) / 128;
+          live2DRef.current?.setMouthValue(Math.min(rms * 8, 1));
+          rafId = requestAnimationFrame(updateMouth);
+        };
+
+        // テキスト同期（タイムライン）
         audio.addEventListener("timeupdate", () => {
           const ct = audio.currentTime;
           let chars = 0;
@@ -134,9 +157,15 @@ export default function Home() {
           onProgress(text.slice(0, chars));
         });
 
-        audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
-        audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
-        audio.play();
+        const cleanup = () => {
+          cancelAnimationFrame(rafId);
+          live2DRef.current?.setMouthValue(0);
+          URL.revokeObjectURL(url);
+          audioCtx.close();
+        };
+        audio.onended = () => { cleanup(); resolve(); };
+        audio.onerror = () => { cleanup(); resolve(); };
+        audio.play().then(() => { rafId = requestAnimationFrame(updateMouth); });
       });
     } catch (e) {
       console.error("VOICEVOX error:", e);
@@ -226,7 +255,8 @@ export default function Home() {
     <div className="flex h-screen bg-gray-100">
       {/* キャラクターエリア（左2/3） */}
       <div className="flex-1">
-        <Live2DViewer />
+        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+        <Live2DViewer ref={live2DRef as any} />
       </div>
 
       {/* チャットエリア（右1/3） */}
