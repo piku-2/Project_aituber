@@ -38,8 +38,9 @@ const Live2DViewer = forwardRef<Live2DViewerHandle>(function Live2DViewer(_, ref
         if (!core) return;
         core.setParameterValueById("ParamEyeBallX", x);
         core.setParameterValueById("ParamEyeBallY", y);
-        core.setParameterValueById("ParamAngleX", x * 20);
-        core.setParameterValueById("ParamAngleY", y * 15);
+        core.setParameterValueById("ParamAngleX", x * 30);
+        core.setParameterValueById("ParamAngleY", y * 25);
+        core.setParameterValueById("ParamBodyAngleX", x * 10);
       } catch { /* ignore */ }
     },
   }));
@@ -71,11 +72,12 @@ const Live2DViewer = forwardRef<Live2DViewerHandle>(function Live2DViewer(_, ref
 
         if (cancelled) { app.destroy(true, { children: true }); return; }
 
-        const model = await Live2DModel.from(MODEL_PATH);
+        const model = await Live2DModel.from(MODEL_PATH, { autoHitTest: false, autoFocus: false });
         if (cancelled) return;
 
         modelRef.current = model;
         app.stage.addChild(model);
+
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const origW: number = (model as any).internalModel?.originalWidth ?? model.width;
@@ -88,7 +90,7 @@ const Live2DViewer = forwardRef<Live2DViewerHandle>(function Live2DViewer(_, ref
           const scale = Math.min(sw / origW, sh / origH) * 0.9;
           model.scale.set(scale);
           model.x = (sw - origW * scale) / 2;
-          model.y = (sh - origH * scale) / 2;
+          model.y = (sh - origH * scale) / 2 + sh * 0.08;
         };
 
         fit();
