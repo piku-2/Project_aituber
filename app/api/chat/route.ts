@@ -48,7 +48,8 @@ export async function POST(req: NextRequest) {
       : await callOllama(messages);
     return NextResponse.json({ content });
   } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: "LLM request failed" }, { status: 502 });
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[chat] LLM error:", msg);
+    return NextResponse.json({ error: msg }, { status: 502 });
   }
 }

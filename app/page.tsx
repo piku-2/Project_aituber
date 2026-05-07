@@ -191,6 +191,7 @@ export default function Home() {
         body: JSON.stringify({ messages: next }),
       });
       const data = await res.json();
+      if (!res.ok || !data.content) throw new Error(data.error ?? "LLM request failed");
       setSpeakingContent("");
       await speak(data.content, (partial) => setSpeakingContent(partial));
       setSpeakingContent("");
