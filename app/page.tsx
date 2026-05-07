@@ -93,6 +93,51 @@ export default function Home() {
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
   const transcriptRef = useRef("");
   const messagesRef = useRef<Message[]>([]);
+  const isDraggingRef = useRef(false);
+  const loadingRef = useRef(false);
+  const speakingRef = useRef(false);
+  const lastActivityRef = useRef(Date.now());
+  const IDLE_MS = 30_000;
+
+  useEffect(() => { loadingRef.current = loading; }, [loading]);
+  useEffect(() => { speakingRef.current = !!speakingContent; }, [speakingContent]);
+  useEffect(() => { lastActivityRef.current = Date.now(); }, [messages]);
+
+  // アイドル発言（常に最新クロージャを参照するための ref）
+  const idleSpeakRef = useRef<(() => Promise<void>) | undefined>(undefined);
+  idleSpeakRef.current = async () => {
+    if (loadingRef.current || speakingRef.current) return;
+    try {
+      const res = await fetch("/api/idle", { method: "POST" });
+      const data = await res.json();
+      if (!data.content) return;
+      lastActivityRef.current = Date.now();
+      setSpeakingContent("");
+      await speak(data.content, (partial) => setSpeakingContent(partial));
+      setSpeakingContent("");
+    } catch { /* ignore */ }
+  };
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (Date.now() - lastActivityRef.current >= IDLE_MS) {
+        lastActivityRef.current = Date.now();
+        idleSpeakRef.current?.();
+      }
+    }, 5_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const handleMouseDown = () => { isDraggingRef.current = true; };
+  const handleMouseUp = () => { isDraggingRef.current = false; };
+  const handleMouseLeave = () => { isDraggingRef.current = false; };
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = Math.max(-1, Math.min(1, ((e.clientX - rect.left) / rect.width - 0.5) * 2));
+    const y = Math.max(-1, Math.min(1, -((e.clientY - rect.top) / rect.height - 0.5) * 2));
+    live2DRef.current?.setEyePosition(x, y);
+  };
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -256,10 +301,16 @@ export default function Home() {
   return (
     <div className="flex h-screen bg-gray-100">
       {/* キャラクターエリア（左2/3） */}
-      <div className="flex-1">
+      <div
+        className="flex-1 relative cursor-crosshair"
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
+        onMouseMove={handleMouseMove}
+      >
         {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
         <Live2DViewer ref={live2DRef as any} />
-        <FaceTracker onFaceMove={(x, y) => live2DRef.current?.setEyePosition(x, y)} />
+        <FaceTracker onFaceMove={(x, y) => { if (!isDraggingRef.current) live2DRef.current?.setEyePosition(x, y); }} />
       </div>
 
       {/* チャットエリア（右1/3） */}

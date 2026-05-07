@@ -3,10 +3,11 @@
 import { useEffect, useRef } from "react";
 import { FaceDetector, FilesetResolver } from "@mediapipe/tasks-vision";
 
-const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm";
+const WASM_URL =
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm";
 const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite";
-const SMOOTH = 0.12;
+const SMOOTH = 0.25;
 const NEW_FACE_THRESHOLD = 0.2;
 
 interface Props {
@@ -35,8 +36,14 @@ export default function FaceTracker({ onFaceMove }: Props) {
 
     (async () => {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
         video.srcObject = stream;
         await video.play();
 
@@ -60,15 +67,21 @@ export default function FaceTracker({ onFaceMove }: Props) {
             const vh = video.videoHeight || 1;
 
             if (faces.length > 0) {
-              const centers = faces.map(f => ({
+              const centers = faces.map((f) => ({
                 x: (f.boundingBox!.originX + f.boundingBox!.width / 2) / vw,
                 y: (f.boundingBox!.originY + f.boundingBox!.height / 2) / vh,
               }));
 
               const prev = prevCentersRef.current;
-              const newFaces = prev.length > 0
-                ? centers.filter(c => prev.every(p => Math.hypot(c.x - p.x, c.y - p.y) > NEW_FACE_THRESHOLD))
-                : [];
+              const newFaces =
+                prev.length > 0
+                  ? centers.filter((c) =>
+                      prev.every(
+                        (p) =>
+                          Math.hypot(c.x - p.x, c.y - p.y) > NEW_FACE_THRESHOLD,
+                      ),
+                    )
+                  : [];
 
               if (newFaces.length > 0) {
                 // 新しく現れた顔に切り替え
@@ -77,7 +90,10 @@ export default function FaceTracker({ onFaceMove }: Props) {
                 // 現在追跡中の顔に最も近い顔を継続追跡
                 const tc = trackedRef.current;
                 trackedRef.current = centers.reduce((best, c) =>
-                  Math.hypot(c.x - tc.x, c.y - tc.y) < Math.hypot(best.x - tc.x, best.y - tc.y) ? c : best
+                  Math.hypot(c.x - tc.x, c.y - tc.y) <
+                  Math.hypot(best.x - tc.x, best.y - tc.y)
+                    ? c
+                    : best,
                 );
               } else {
                 trackedRef.current = centers[0];
@@ -115,7 +131,7 @@ export default function FaceTracker({ onFaceMove }: Props) {
       cancelled = true;
       cancelAnimationFrame(rafId);
       detector?.close();
-      stream?.getTracks().forEach(t => t.stop());
+      stream?.getTracks().forEach((t) => t.stop());
       if (video) video.srcObject = null;
     };
   }, []);
