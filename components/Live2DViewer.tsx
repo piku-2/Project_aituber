@@ -7,6 +7,7 @@ const MOUTH_PARAM = "ParamMouthOpenY";
 
 export interface Live2DViewerHandle {
   setMouthValue: (value: number) => void;
+  setEyePosition: (x: number, y: number) => void;
 }
 
 function loadScript(src: string): Promise<void> {
@@ -29,9 +30,17 @@ const Live2DViewer = forwardRef<Live2DViewerHandle>(function Live2DViewer(_, ref
     setMouthValue: (value: number) => {
       try {
         modelRef.current?.internalModel.coreModel.setParameterValueById(MOUTH_PARAM, value);
-      } catch {
-        // パラメータが見つからない場合は無視
-      }
+      } catch { /* ignore */ }
+    },
+    setEyePosition: (x: number, y: number) => {
+      try {
+        const core = modelRef.current?.internalModel.coreModel;
+        if (!core) return;
+        core.setParameterValueById("ParamEyeBallX", x);
+        core.setParameterValueById("ParamEyeBallY", y);
+        core.setParameterValueById("ParamAngleX", x * 20);
+        core.setParameterValueById("ParamAngleY", y * 15);
+      } catch { /* ignore */ }
     },
   }));
 
