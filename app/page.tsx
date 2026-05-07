@@ -6,6 +6,7 @@ import { voiceConfig } from "@/lib/voiceConfig";
 import type { Live2DViewerHandle } from "@/components/Live2DViewer";
 
 const Live2DViewer = dynamic(() => import("@/components/Live2DViewer"), { ssr: false });
+const FaceTracker = dynamic(() => import("@/components/FaceTracker"), { ssr: false });
 
 type Message = {
   role: "user" | "assistant";
@@ -258,6 +259,7 @@ export default function Home() {
       <div className="flex-1">
         {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
         <Live2DViewer ref={live2DRef as any} />
+        <FaceTracker onFaceMove={(x, y) => live2DRef.current?.setEyePosition(x, y)} />
       </div>
 
       {/* チャットエリア（右1/3） */}
