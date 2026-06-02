@@ -96,7 +96,7 @@ export default function Home() {
   const isDraggingRef = useRef(false);
   const loadingRef = useRef(false);
   const speakingRef = useRef(false);
-  const lastActivityRef = useRef(Date.now());
+  const lastActivityRef = useRef(0);
   const IDLE_MS = 30_000;
 
   useEffect(() => { loadingRef.current = loading; }, [loading]);
@@ -105,18 +105,21 @@ export default function Home() {
 
   // アイドル発言（常に最新クロージャを参照するための ref）
   const idleSpeakRef = useRef<(() => Promise<void>) | undefined>(undefined);
-  idleSpeakRef.current = async () => {
-    if (loadingRef.current || speakingRef.current) return;
-    try {
-      const res = await fetch("/api/idle", { method: "POST" });
-      const data = await res.json();
-      if (!data.content) return;
-      lastActivityRef.current = Date.now();
-      setSpeakingContent("");
-      await speak(data.content, (partial) => setSpeakingContent(partial));
-      setSpeakingContent("");
-    } catch { /* ignore */ }
-  };
+
+  useEffect(() => {
+    idleSpeakRef.current = async () => {
+      if (loadingRef.current || speakingRef.current) return;
+      try {
+        const res = await fetch("/api/idle", { method: "POST" });
+        const data = await res.json();
+        if (!data.content) return;
+        lastActivityRef.current = Date.now();
+        setSpeakingContent("");
+        await speak(data.content, (partial) => setSpeakingContent(partial));
+        setSpeakingContent("");
+      } catch { /* ignore */ }
+    };
+  });
 
   useEffect(() => {
     const timer = setInterval(() => {
