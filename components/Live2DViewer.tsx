@@ -1,8 +1,11 @@
 "use client";
 
-import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import Image from "next/image";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 
 const MODEL_PATH = "/yachiyo/八千代辉夜姬.model3.json";
+const FALLBACK_IMAGE_PATH = "/yachiyo/八千代辉夜姬头像1.png";
+const CUBISM_CORE_PATH = "/live2dcubismcore.min.js";
 const MOUTH_PARAM = "ParamMouthOpenY";
 
 export interface Live2DViewerHandle {
@@ -23,6 +26,7 @@ function loadScript(src: string): Promise<void> {
 
 const Live2DViewer = forwardRef<Live2DViewerHandle>(function Live2DViewer(_, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const modelRef = useRef<any>(null);
 
@@ -55,8 +59,9 @@ const Live2DViewer = forwardRef<Live2DViewerHandle>(function Live2DViewer(_, ref
 
     (async () => {
       try {
-        await loadScript("/live2dcubismcore.min.js");
+        await loadScript(CUBISM_CORE_PATH);
         if (cancelled) return;
+        setLoadError(null);
 
         const PIXI = await import("pixi.js");
         const { Live2DModel } = await import("pixi-live2d-display/cubism4");
@@ -103,6 +108,11 @@ const Live2DViewer = forwardRef<Live2DViewerHandle>(function Live2DViewer(_, ref
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (app as any)._resizeObserver = resizeObserver;
       } catch (e) {
+        const message =
+          e instanceof Error && e.message.includes(CUBISM_CORE_PATH)
+            ? `${CUBISM_CORE_PATH} が見つかりません`
+            : "Live2D の初期化に失敗しました";
+        if (!cancelled) setLoadError(message);
         console.error("Live2D init error:", e);
       }
     })();
@@ -116,7 +126,24 @@ const Live2DViewer = forwardRef<Live2DViewerHandle>(function Live2DViewer(_, ref
     };
   }, []);
 
-  return <div ref={containerRef} className="w-full h-full" />;
+  return (
+    <div ref={containerRef} className="relative w-full h-full">
+      {loadError && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center">
+          <Image
+            src={FALLBACK_IMAGE_PATH}
+            alt="八千代辉夜姬"
+            width={500}
+            height={500}
+            className="max-h-[72%] max-w-[72%] object-contain opacity-90"
+          />
+          <p className="max-w-[28rem] rounded bg-black/60 px-4 py-2 text-sm text-white">
+            {loadError}
+          </p>
+        </div>
+      )}
+    </div>
+  );
 });
 
 export default Live2DViewer;
