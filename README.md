@@ -23,7 +23,7 @@ Live2D キャラクターが VOICEVOX で喋る AITuber チャットボット。
 
 ```bash
 git clone <repo-url>
-cd aituber
+cd Project_aituber
 npm install
 ```
 
