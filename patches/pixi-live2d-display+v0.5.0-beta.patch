@@ -1,5 +1,5 @@
 diff --git a/node_modules/pixi-live2d-display/dist/cubism4.es.js b/node_modules/pixi-live2d-display/dist/cubism4.es.js
-index a272bc8..d74da53 100644
+index a272bc8..172d7f3 100644
 --- a/node_modules/pixi-live2d-display/dist/cubism4.es.js
 +++ b/node_modules/pixi-live2d-display/dist/cubism4.es.js
 @@ -1477,7 +1477,9 @@ var LogLevel = /* @__PURE__ */ ((LogLevel2) => {
@@ -22,17 +22,18 @@ index a272bc8..d74da53 100644
    }
    /**
     * @deprecated
-@@ -8090,7 +8092,7 @@ class ModelSettings {
+@@ -8090,7 +8092,8 @@ class ModelSettings {
     * @return Resolved path.
     */
    resolveURL(path) {
 -    return utils.url.resolve(this.url, path);
-+    return new URL(path, this.url).toString();
++    const baseURL = new URL(this.url, globalThis.document?.baseURI ?? globalThis.location?.href ?? "http://localhost/");
++    return new URL(path, baseURL).toString();
    }
    /**
     * Replaces the resource files by running each file through the `replacer`.
 diff --git a/node_modules/pixi-live2d-display/dist/cubism4.js b/node_modules/pixi-live2d-display/dist/cubism4.js
-index c97b655..f308f18 100644
+index c97b655..c51847a 100644
 --- a/node_modules/pixi-live2d-display/dist/cubism4.js
 +++ b/node_modules/pixi-live2d-display/dist/cubism4.js
 @@ -1479,7 +1479,9 @@ var __async = (__this, __arguments, generator) => {
@@ -55,12 +56,13 @@ index c97b655..f308f18 100644
      }
      /**
       * @deprecated
-@@ -8092,7 +8094,7 @@ var __async = (__this, __arguments, generator) => {
+@@ -8092,7 +8094,8 @@ var __async = (__this, __arguments, generator) => {
       * @return Resolved path.
       */
      resolveURL(path) {
 -      return core.utils.url.resolve(this.url, path);
-+      return new URL(path, this.url).toString();
++      const baseURL = new URL(this.url, globalThis.document?.baseURI ?? globalThis.location?.href ?? "http://localhost/");
++      return new URL(path, baseURL).toString();
      }
      /**
       * Replaces the resource files by running each file through the `replacer`.
