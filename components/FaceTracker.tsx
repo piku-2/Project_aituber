@@ -14,6 +14,11 @@ interface Props {
   onFaceMove: (x: number, y: number) => void;
 }
 
+function isExpectedCameraError(error: unknown): boolean {
+  if (!(error instanceof DOMException)) return false;
+  return ["NotAllowedError", "NotFoundError", "NotReadableError", "SecurityError"].includes(error.name);
+}
+
 export default function FaceTracker({ onFaceMove }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const callbackRef = useRef(onFaceMove);
@@ -123,7 +128,9 @@ export default function FaceTracker({ onFaceMove }: Props) {
         };
         rafId = requestAnimationFrame(detect);
       } catch (e) {
-        console.error("[FaceTracker]", e);
+        if (!isExpectedCameraError(e)) {
+          console.error("[FaceTracker]", e);
+        }
       }
     })();
 

@@ -1,8 +1,19 @@
 diff --git a/node_modules/pixi-live2d-display/dist/cubism4.es.js b/node_modules/pixi-live2d-display/dist/cubism4.es.js
-index a272bc8..33de3e7 100644
+index a272bc8..172d7f3 100644
 --- a/node_modules/pixi-live2d-display/dist/cubism4.es.js
 +++ b/node_modules/pixi-live2d-display/dist/cubism4.es.js
-@@ -2284,7 +2284,7 @@ class CubismModel {
+@@ -1477,7 +1477,9 @@ var LogLevel = /* @__PURE__ */ ((LogLevel2) => {
+   return LogLevel2;
+ })(LogLevel || {});
+ const CSM_ASSERT = process.env.NODE_ENV === "production" ? () => {
+-} : (expr) => console.assert(expr);
++} : (expr) => {
++  if (!expr) console.assert(expr);
++};
+ function CubismLogVerbose(fmt, ...args) {
+   CubismDebug.print(LogLevel.LogLevel_Verbose, "[CSM][V]" + fmt + "\n", args);
+ }
+@@ -2284,7 +2286,7 @@ class CubismModel {
     * @return Drawableの描画順リスト
     */
    getDrawableRenderOrders() {
@@ -11,3 +22,47 @@ index a272bc8..33de3e7 100644
    }
    /**
     * @deprecated
+@@ -8090,7 +8092,8 @@ class ModelSettings {
+    * @return Resolved path.
+    */
+   resolveURL(path) {
+-    return utils.url.resolve(this.url, path);
++    const baseURL = new URL(this.url, globalThis.document?.baseURI ?? globalThis.location?.href ?? "http://localhost/");
++    return new URL(path, baseURL).toString();
+   }
+   /**
+    * Replaces the resource files by running each file through the `replacer`.
+diff --git a/node_modules/pixi-live2d-display/dist/cubism4.js b/node_modules/pixi-live2d-display/dist/cubism4.js
+index c97b655..c51847a 100644
+--- a/node_modules/pixi-live2d-display/dist/cubism4.js
++++ b/node_modules/pixi-live2d-display/dist/cubism4.js
+@@ -1479,7 +1479,9 @@ var __async = (__this, __arguments, generator) => {
+     return LogLevel2;
+   })(LogLevel || {});
+   const CSM_ASSERT = process.env.NODE_ENV === "production" ? () => {
+-  } : (expr) => console.assert(expr);
++  } : (expr) => {
++    if (!expr) console.assert(expr);
++  };
+   function CubismLogVerbose(fmt, ...args) {
+     CubismDebug.print(LogLevel.LogLevel_Verbose, "[CSM][V]" + fmt + "\n", args);
+   }
+@@ -2286,7 +2288,7 @@ var __async = (__this, __arguments, generator) => {
+      * @return Drawableの描画順リスト
+      */
+     getDrawableRenderOrders() {
+-      return this._model.drawables.renderOrders;
++      return this._model.renderOrders ?? this._model.drawables.renderOrders;
+     }
+     /**
+      * @deprecated
+@@ -8092,7 +8094,8 @@ var __async = (__this, __arguments, generator) => {
+      * @return Resolved path.
+      */
+     resolveURL(path) {
+-      return core.utils.url.resolve(this.url, path);
++      const baseURL = new URL(this.url, globalThis.document?.baseURI ?? globalThis.location?.href ?? "http://localhost/");
++      return new URL(path, baseURL).toString();
+     }
+     /**
+      * Replaces the resource files by running each file through the `replacer`.
