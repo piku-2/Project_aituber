@@ -94,43 +94,6 @@ export default function Home() {
   const transcriptRef = useRef("");
   const messagesRef = useRef<Message[]>([]);
   const isDraggingRef = useRef(false);
-  const loadingRef = useRef(false);
-  const speakingRef = useRef(false);
-  const lastActivityRef = useRef(0);
-  const IDLE_MS = 30_000;
-
-  useEffect(() => { loadingRef.current = loading; }, [loading]);
-  useEffect(() => { speakingRef.current = !!speakingContent; }, [speakingContent]);
-  useEffect(() => { lastActivityRef.current = Date.now(); }, [messages]);
-
-  // アイドル発言（常に最新クロージャを参照するための ref）
-  const idleSpeakRef = useRef<(() => Promise<void>) | undefined>(undefined);
-
-  useEffect(() => {
-    idleSpeakRef.current = async () => {
-      if (loadingRef.current || speakingRef.current) return;
-      try {
-        const res = await fetch("/api/idle", { method: "POST" });
-        const data = await res.json();
-        if (!data.content) return;
-        lastActivityRef.current = Date.now();
-        setSpeakingContent("");
-        await speak(data.content, (partial) => setSpeakingContent(partial));
-        setSpeakingContent("");
-      } catch { /* ignore */ }
-    };
-  });
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (Date.now() - lastActivityRef.current >= IDLE_MS) {
-        lastActivityRef.current = Date.now();
-        idleSpeakRef.current?.();
-      }
-    }, 5_000);
-    return () => clearInterval(timer);
-  }, []);
-
   const handleMouseDown = () => { isDraggingRef.current = true; };
   const handleMouseUp = () => { isDraggingRef.current = false; };
   const handleMouseLeave = () => { isDraggingRef.current = false; };
@@ -239,12 +202,64 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: next }),
       });
-      const data = await res.json();
-      if (!res.ok || !data.content) throw new Error(data.error ?? "LLM request failed");
+      if (!res.ok || !res.body) {
+        let msg = "LLM request failed";
+        try { msg = (await res.json()).error ?? msg; } catch { /* not json */ }
+        throw new Error(msg);
+      }
+
       setSpeakingContent("");
-      await speak(data.content, (partial) => setSpeakingContent(partial));
+
+      // ストリームを文単位に分割し、文ができ次第 VOICEVOX で再生するパイプライン
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      const queue: string[] = [];
+      let buffer = "";
+      let producerDone = false;
+      let spoken = "";
+      let wake: (() => void) | null = null;
+      const notify = () => { if (wake) { const w = wake; wake = null; w(); } };
+
+      const flushSentences = () => {
+        let idx: number;
+        while ((idx = buffer.search(/[。！？\n]/)) !== -1) {
+          queue.push(buffer.slice(0, idx + 1));
+          buffer = buffer.slice(idx + 1);
+          notify();
+        }
+      };
+
+      const producer = (async () => {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          flushSentences();
+        }
+        if (buffer.trim()) { queue.push(buffer); buffer = ""; }
+        producerDone = true;
+        notify();
+      })();
+
+      const consumer = (async () => {
+        while (true) {
+          if (queue.length === 0) {
+            if (producerDone) break;
+            await new Promise<void>((r) => { wake = r; });
+            continue;
+          }
+          const piece = queue.shift()!.trim();
+          if (!piece) continue;
+          await speak(piece, (partial) => setSpeakingContent(spoken + partial));
+          spoken += piece;
+        }
+      })();
+
+      await Promise.all([producer, consumer]);
       setSpeakingContent("");
-      setMessages([...next, { role: "assistant", content: data.content }]);
+      const full = spoken.trim();
+      if (!full) throw new Error("empty response");
+      setMessages([...next, { role: "assistant", content: full }]);
     } catch {
       setMessages([
         ...next,
@@ -256,6 +271,8 @@ export default function Home() {
   }
 
   function toggleListening() {
+    // 応答中・発話中は音声入力を受け付けない
+    if (loading) return;
     if (listening) {
       recognitionRef.current?.stop();
       return;
@@ -360,17 +377,29 @@ export default function Home() {
           <div ref={bottomRef} />
         </div>
 
+        {/* 応答・発話中は入力不可であることを示すバー */}
+        {loading && (
+          <div className="flex items-center justify-center gap-2 px-3 py-1.5 bg-amber-50 border-t border-amber-200 text-amber-700 text-sm font-medium">
+            <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+            聖華が話しています… 終わるまでお待ちください
+          </div>
+        )}
+
         <form
           onSubmit={handleSubmit}
-          className="p-3 border-t border-gray-200 flex gap-2"
+          className={`p-3 border-t border-gray-200 flex gap-2 transition-opacity ${
+            loading ? "opacity-50" : ""
+          }`}
+          aria-disabled={loading}
         >
           <button
             type="button"
             onClick={toggleListening}
-            className={`rounded-full w-10 h-10 flex items-center justify-center text-lg shrink-0 transition-colors ${
+            disabled={loading}
+            className={`rounded-full w-10 h-10 flex items-center justify-center text-lg shrink-0 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
               listening
                 ? "bg-red-500 text-white animate-pulse"
-                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                : "bg-gray-100 text-gray-500 hover:bg-gray-200 disabled:hover:bg-gray-100"
             }`}
           >
             🎤
@@ -379,14 +408,20 @@ export default function Home() {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={listening ? "聞いています..." : "メッセージを入力..."}
-            className="flex-1 rounded-full border border-gray-300 bg-gray-50 px-4 py-2 text-base text-gray-900 placeholder-gray-400 outline-none focus:border-blue-400 focus:bg-white"
+            placeholder={
+              loading
+                ? "話し終わるまで入力できません…"
+                : listening
+                ? "聞いています..."
+                : "メッセージを入力..."
+            }
+            className="flex-1 rounded-full border border-gray-300 bg-gray-50 px-4 py-2 text-base text-gray-900 placeholder-gray-400 outline-none focus:border-blue-400 focus:bg-white disabled:cursor-not-allowed disabled:bg-gray-100"
             disabled={loading}
           />
           <button
             type="submit"
             disabled={loading || !input.trim()}
-            className="rounded-full bg-blue-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40 hover:bg-blue-600"
+            className="rounded-full bg-blue-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-blue-600"
           >
             送信
           </button>
