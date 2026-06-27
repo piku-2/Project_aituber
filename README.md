@@ -12,8 +12,7 @@ Live2D キャラクターが VOICEVOX で喋る AITuber チャットボット。
 | Node.js 18以上 | Next.js の実行 | https://nodejs.org |
 | VOICEVOX | 音声合成 | https://voicevox.hiroshiba.jp |
 | Live2D Cubism Core JS | Live2D モデル描画 | 下記参照（手動ダウンロード必要） |
-| Gemini API キー | LLM（優先） | Google AI Studio で取得 |
-| Ollama + qwen3:8b | LLM（Gemini がない場合） | https://ollama.com |
+| Gemini API キー | LLM | Google AI Studio で取得 |
 
 ---
 
@@ -59,16 +58,14 @@ public/
 プロジェクトルートに `.env.local` を作成する。
 
 ```bash
-# Gemini API を使う場合（設定されていれば自動で優先される）
+# Gemini API キー（必須）
 GEMINI_API_KEY=your_api_key_here
 
 # VOICEVOX が WSL から直接アクセスできない場合（Windows の IP を指定）
 # VOICEVOX_URL=http://<WindowsのIP>:50021
 ```
 
-**LLM の自動切り替え:**
-- `GEMINI_API_KEY` あり → Gemini 2.5 Flash
-- `GEMINI_API_KEY` なし → Ollama qwen3:8b（`localhost:11434`）
+LLM には Gemini 2.5 Flash-Lite（`gemini-2.5-flash-lite`）を使用する。`GEMINI_API_KEY` が必須。
 
 ### 5. VOICEVOX の起動
 
@@ -106,14 +103,7 @@ export const voiceConfig = {
 
 スピーカーID はブラウザで `http://localhost:50021/speakers` を開くと一覧が確認できる。
 
-### 7. Ollama を使う場合
-
-```bash
-ollama pull qwen3:8b
-ollama serve
-```
-
-### 8. 開発サーバーの起動
+### 7. 開発サーバーの起動
 
 ```bash
 npm run dev
@@ -145,7 +135,7 @@ npm run dev
 | フレームワーク | Next.js 16 (App Router) |
 | 言語 | TypeScript |
 | スタイル | Tailwind CSS |
-| LLM | Gemini 2.5 Flash / Ollama qwen3:8b（自動切り替え） |
+| LLM | Gemini 2.5 Flash-Lite（gemini-2.5-flash-lite） |
 | 音声合成 | VOICEVOX（ブラウザから直接呼び出し） |
 | 音声入力 | Web Speech API |
 | Live2D | pixi.js v7 + pixi-live2d-display v0.5.0-beta |
@@ -158,7 +148,7 @@ npm run dev
 app/
   page.tsx              # チャット画面（Live2D + チャット UI）
   api/
-    chat/route.ts       # LLM プロキシ（Gemini / Ollama 自動切り替え）
+    chat/route.ts       # LLM プロキシ（Gemini）
     tts/route.ts        # VOICEVOX プロキシ（未使用・ブラウザ直接呼び出し）
 components/
   Live2DViewer.tsx      # Live2D モデル描画コンポーネント
