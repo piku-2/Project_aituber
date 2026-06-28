@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { GoogleGenAI } from "@google/genai";
+import { getRandomFallback } from "@/lib/fallbackResponses";
+import { createFallbackStream } from "@/lib/chatStream";
 
 const SYSTEM_PROMPT = `あなたは「夜泊 聖華（よどまり せいか）」として振る舞ってください。
 
@@ -24,6 +26,24 @@ const SYSTEM_PROMPT = `あなたは「夜泊 聖華（よどまり せいか）�
 - 現在、文化祭のデモ展示として来場者と会話している
 - 回答は簡潔にまとめ、自然な会話を心がける`;
 
+const STREAM_HEADERS = {
+  "Content-Type": "text/plain; charset=utf-8",
+  "Cache-Control": "no-cache, no-transform",
+};
+
+const encoder = new TextEncoder();
+
+/** 単一のテキストを流すだけのストリームレスポンス（定型文フォールバック用）。 */
+function textResponse(text: string): Response {
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(text));
+      controller.close();
+    },
+  });
+  return new Response(stream, { headers: STREAM_HEADERS });
+}
+
 export async function POST(req: NextRequest) {
   const { messages } = await req.json();
 
@@ -45,31 +65,16 @@ export async function POST(req: NextRequest) {
 
     const geminiStream = await chat.sendMessageStream({ message: lastMessage });
 
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream<Uint8Array>({
-      async start(controller) {
-        try {
-          for await (const chunk of geminiStream) {
-            const text = chunk.text;
-            if (text) controller.enqueue(encoder.encode(text));
-          }
-        } catch (e) {
-          console.error("[chat] stream error:", e instanceof Error ? e.message : String(e));
-        } finally {
-          controller.close();
-        }
-      },
-    });
+    // ストリーム途中での失敗や空応答（レートリミット等）でも、
+    // 何も喋らないと不自然なので定型文でフォローする。
+    const stream = createFallbackStream(geminiStream, getRandomFallback);
 
-    return new Response(stream, {
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "no-cache, no-transform",
-      },
-    });
+    return new Response(stream, { headers: STREAM_HEADERS });
   } catch (e) {
+    // 接続前に失敗するケース（ネットワーク切断・レートリミットでの即時エラー等）。
+    // エラーを返さず、定型文をストリームで返してキャラクターに喋らせる。
     const msg = e instanceof Error ? e.message : String(e);
-    console.error("[chat] LLM error:", msg);
-    return NextResponse.json({ error: msg }, { status: 502 });
+    console.error("[chat] LLM error, falling back to canned response:", msg);
+    return textResponse(getRandomFallback());
   }
 }

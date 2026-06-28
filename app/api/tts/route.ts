@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const VOICEVOX_URL = process.env.VOICEVOX_URL ?? "http://localhost:50021";
-const SPEAKER = 1; // ずんだもん（ノーマル）。変更する場合はここを変える
+const SPEAKER = 2; // ずんだもん（ノーマル）。変更する場合はここを変える
 
 export async function POST(req: NextRequest) {
   const { text } = await req.json();
