@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
-import { voiceConfig } from "@/lib/voiceConfig";
 import type { Live2DViewerHandle } from "@/components/Live2DViewer";
 
 const Live2DViewer = dynamic(() => import("@/components/Live2DViewer"), { ssr: false });
@@ -114,25 +113,18 @@ export default function Home() {
   }, [messages, liveTranscript, speakingContent]);
 
   async function speak(text: string, onProgress: (partial: string) => void): Promise<void> {
-    const VOICEVOX = "http://localhost:50021";
-    const { speakerId, ...customParams } = voiceConfig;
     try {
-      const queryRes = await fetch(
-        `${VOICEVOX}/audio_query?text=${encodeURIComponent(text)}&speaker=${speakerId}`,
-        { method: "POST" }
-      );
-      if (!queryRes.ok) return;
-      const query: VoicevoxQuery = { ...await queryRes.json(), ...customParams };
-      const timeline = buildTimeline(query, text);
-
-      const synthRes = await fetch(`${VOICEVOX}/synthesis?speaker=${speakerId}`, {
+      const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(query),
+        body: JSON.stringify({ text }),
       });
-      if (!synthRes.ok) return;
+      if (!res.ok) return;
+      const { query, audio } = (await res.json()) as { query: VoicevoxQuery; audio: string };
+      const timeline = buildTimeline(query, text);
 
-      const blob = await synthRes.blob();
+      const bytes = Uint8Array.from(atob(audio), (c) => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: "audio/wav" });
       const url = URL.createObjectURL(blob);
 
       await new Promise<void>((resolve) => {
@@ -200,7 +192,10 @@ export default function Home() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next }),
+        // サーバー側の検証上限（50件・2000字）に合わせて直近の履歴だけ送る
+        body: JSON.stringify({
+          messages: next.slice(-50).map((m) => ({ ...m, content: m.content.slice(0, 2000) })),
+        }),
       });
       if (!res.ok || !res.body) {
         let msg = "LLM request failed";
