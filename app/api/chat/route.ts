@@ -33,6 +33,30 @@ const STREAM_HEADERS = {
 
 const encoder = new TextEncoder();
 
+const MAX_MESSAGES = 50;
+const MAX_CONTENT_LENGTH = 2000;
+
+type ChatMessage = { role: string; content: string };
+
+function validateMessages(body: unknown): ChatMessage[] | null {
+  if (typeof body !== "object" || body === null) return null;
+  const { messages } = body as { messages?: unknown };
+  if (!Array.isArray(messages) || messages.length === 0 || messages.length > MAX_MESSAGES) {
+    return null;
+  }
+  for (const m of messages) {
+    if (
+      typeof m !== "object" || m === null ||
+      typeof (m as ChatMessage).role !== "string" ||
+      typeof (m as ChatMessage).content !== "string" ||
+      (m as ChatMessage).content.length > MAX_CONTENT_LENGTH
+    ) {
+      return null;
+    }
+  }
+  return messages as ChatMessage[];
+}
+
 /** 単一のテキストを流すだけのストリームレスポンス（定型文フォールバック用）。 */
 function textResponse(text: string): Response {
   const stream = new ReadableStream<Uint8Array>({
@@ -45,11 +69,20 @@ function textResponse(text: string): Response {
 }
 
 export async function POST(req: NextRequest) {
-  const { messages } = await req.json();
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return new Response(JSON.stringify({ error: "invalid JSON" }), { status: 400 });
+  }
+  const messages = validateMessages(body);
+  if (!messages) {
+    return new Response(JSON.stringify({ error: "invalid messages" }), { status: 400 });
+  }
 
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-    const history = messages.slice(0, -1).map((m: { role: string; content: string }) => ({
+    const history = messages.slice(0, -1).map((m) => ({
       role: m.role === "user" ? "user" : "model",
       parts: [{ text: m.content }],
     }));
