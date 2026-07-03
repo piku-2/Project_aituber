@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
+import { voiceConfig } from "@/lib/voiceConfig";
 import type { Live2DViewerHandle } from "@/components/Live2DViewer";
 
 const Live2DViewer = dynamic(() => import("@/components/Live2DViewer"), { ssr: false });
@@ -113,18 +114,27 @@ export default function Home() {
   }, [messages, liveTranscript, speakingContent]);
 
   async function speak(text: string, onProgress: (partial: string) => void): Promise<void> {
+    // VOICEVOX はブラウザ（Windows 側）から直接叩く。WSL 内のサーバーを経由すると
+    // Windows 上の VOICEVOX に届かないため（詳細は README 参照）
+    const VOICEVOX = "http://localhost:50021";
+    const { speakerId, ...customParams } = voiceConfig;
     try {
-      const res = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-      if (!res.ok) return;
-      const { query, audio } = (await res.json()) as { query: VoicevoxQuery; audio: string };
+      const queryRes = await fetch(
+        `${VOICEVOX}/audio_query?text=${encodeURIComponent(text)}&speaker=${speakerId}`,
+        { method: "POST" }
+      );
+      if (!queryRes.ok) return;
+      const query: VoicevoxQuery = { ...await queryRes.json(), ...customParams };
       const timeline = buildTimeline(query, text);
 
-      const bytes = Uint8Array.from(atob(audio), (c) => c.charCodeAt(0));
-      const blob = new Blob([bytes], { type: "audio/wav" });
+      const synthRes = await fetch(`${VOICEVOX}/synthesis?speaker=${speakerId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(query),
+      });
+      if (!synthRes.ok) return;
+
+      const blob = await synthRes.blob();
       const url = URL.createObjectURL(blob);
 
       await new Promise<void>((resolve) => {

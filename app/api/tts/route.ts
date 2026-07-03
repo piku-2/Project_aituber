@@ -17,26 +17,36 @@ export async function POST(req: NextRequest) {
 
   const { speakerId, ...customParams } = voiceConfig;
 
-  const queryRes = await fetch(
-    `${VOICEVOX_URL}/audio_query?text=${encodeURIComponent(text)}&speaker=${speakerId}`,
-    { method: "POST" }
-  );
-  if (!queryRes.ok) {
-    return NextResponse.json({ error: "audio_query failed" }, { status: 502 });
+  // VOICEVOX が起動していない・到達できない場合も 500 にせず 502 を返し、
+  // クライアント側は音声なしでテキスト表示だけ続行できるようにする
+  try {
+    const queryRes = await fetch(
+      `${VOICEVOX_URL}/audio_query?text=${encodeURIComponent(text)}&speaker=${speakerId}`,
+      { method: "POST" }
+    );
+    if (!queryRes.ok) {
+      return NextResponse.json({ error: "audio_query failed" }, { status: 502 });
+    }
+
+    const query = { ...(await queryRes.json()), ...customParams };
+
+    const synthRes = await fetch(`${VOICEVOX_URL}/synthesis?speaker=${speakerId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(query),
+    });
+    if (!synthRes.ok) {
+      return NextResponse.json({ error: "synthesis failed" }, { status: 502 });
+    }
+
+    // 口パク用タイムラインをクライアントで組み立てるためにクエリも一緒に返す
+    const audio = Buffer.from(await synthRes.arrayBuffer());
+    return NextResponse.json({ query, audio: audio.toString("base64") });
+  } catch (e) {
+    console.error(
+      `[tts] VOICEVOX (${VOICEVOX_URL}) に接続できません:`,
+      e instanceof Error ? e.message : String(e)
+    );
+    return NextResponse.json({ error: "voicevox unreachable" }, { status: 502 });
   }
-
-  const query = { ...(await queryRes.json()), ...customParams };
-
-  const synthRes = await fetch(`${VOICEVOX_URL}/synthesis?speaker=${speakerId}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(query),
-  });
-  if (!synthRes.ok) {
-    return NextResponse.json({ error: "synthesis failed" }, { status: 502 });
-  }
-
-  // 口パク用タイムラインをクライアントで組み立てるためにクエリも一緒に返す
-  const audio = Buffer.from(await synthRes.arrayBuffer());
-  return NextResponse.json({ query, audio: audio.toString("base64") });
 }

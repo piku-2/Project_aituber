@@ -27,7 +27,10 @@ export function createFallbackStream(
       } catch (e) {
         console.error("[chat] stream error:", e instanceof Error ? e.message : String(e));
       } finally {
-        if (!emitted) controller.enqueue(encoder.encode(fallback()));
+        if (!emitted) {
+          console.warn("[chat] LLMから本文が得られなかったため定型文で応答します");
+          controller.enqueue(encoder.encode(fallback()));
+        }
         controller.close();
       }
     },
