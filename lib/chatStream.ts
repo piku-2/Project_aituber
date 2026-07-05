@@ -43,10 +43,14 @@ export function dedupeOverlap(previous: string, next: string): string {
 export function createFallbackStream(
   source: AsyncIterable<TextChunk>,
   fallback: () => string,
+  // ストリームが部分出力の後に中断（503 等）した場合に続けて流す
+  // リカバリーのセリフ。未指定なら従来どおり部分出力のまま終わる。
+  interrupted?: () => string,
 ): ReadableStream<Uint8Array> {
   return new ReadableStream<Uint8Array>({
     async start(controller) {
       let emitted = false;
+      let errored = false;
       let accumulated = "";
       try {
         for await (const chunk of source) {
@@ -67,11 +71,18 @@ export function createFallbackStream(
           }
         }
       } catch (e) {
+        errored = true;
         console.error("[chat] stream error:", e instanceof Error ? e.message : String(e));
       } finally {
         if (!emitted) {
           console.warn("[chat] LLMから本文が得られなかったため定型文で応答します");
           controller.enqueue(encoder.encode(fallback()));
+        } else if (errored && interrupted) {
+          // 部分出力の後に中断した場合、文の途中で黙らないよう
+          // 「言葉が途切れた」ことを認めるリカバリーのセリフを続けて流す。
+          // 先頭の "\n" はクライアントの文分割が新しい文として扱うために必要。
+          console.warn("[chat] ストリームが途中で中断したためリカバリーのセリフを続けます");
+          controller.enqueue(encoder.encode("\n" + interrupted()));
         }
         controller.close();
       }

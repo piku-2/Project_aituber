@@ -19,3 +19,19 @@ export function getRandomFallback(): string {
   const i = Math.floor(Math.random() * FALLBACK_RESPONSES.length);
   return FALLBACK_RESPONSES[i];
 }
+
+// ストリーミング応答が途中で中断（503 等）し、文の途中でブツ切りになったときに
+// 続けて流すリカバリーのセリフ集。「言葉が途切れた」ことをキャラとして自然に受ける。
+export const INTERRUPTED_RESPONSES: readonly string[] = [
+  "……あら、ごめんなさい。途中で言葉が途切れてしまいましたわ。もう一度聞いていただけますか？",
+  "……ふふ、少し考えがまとまらなくなってしまったのです。続きはまた聞いてくださいな。",
+  "……おっと、失礼しました。途中で頭が真っ白になってしまったのですわ。もう一度お願いできますか？",
+  "……ごめんなさい、話の途中で息が切れてしまいました。よかったら、もう一度尋ねてくださいね。",
+  "……あらあら、言葉が迷子になってしまったみたいなのです。続きはもう一度聞いてくださいませ。",
+] as const;
+
+/** 中断リカバリーのセリフをランダムに1つ返す。 */
+export function getRandomInterrupted(): string {
+  const i = Math.floor(Math.random() * INTERRUPTED_RESPONSES.length);
+  return INTERRUPTED_RESPONSES[i];
+}
