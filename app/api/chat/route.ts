@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { GoogleGenAI } from "@google/genai";
-import { getRandomFallback } from "@/lib/fallbackResponses";
+import { getRandomFallback, getRandomInterrupted } from "@/lib/fallbackResponses";
 import { createFallbackStream } from "@/lib/chatStream";
 import { detectInjection, getRandomDeflection } from "@/lib/promptGuard";
 
@@ -147,7 +147,8 @@ export async function POST(req: NextRequest) {
 
     // ストリーム途中での失敗や空応答（レートリミット等）でも、
     // 何も喋らないと不自然なので定型文でフォローする。
-    const stream = createFallbackStream(geminiStream, getRandomFallback);
+    // 途中中断（503 等）時はリカバリーのセリフ（getRandomInterrupted）を続けて流す
+    const stream = createFallbackStream(geminiStream, getRandomFallback, getRandomInterrupted);
 
     return new Response(stream, { headers: STREAM_HEADERS });
   } catch (e) {
