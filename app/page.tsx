@@ -347,11 +347,10 @@ export default function Home() {
               className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
             >
               <div
-                className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-base leading-relaxed whitespace-pre-wrap ${
-                  msg.role === "user"
+                className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-base leading-relaxed whitespace-pre-wrap ${msg.role === "user"
                     ? "bg-blue-500 text-white font-medium"
                     : "bg-gray-100 text-gray-900 font-medium"
-                }`}
+                  }`}
               >
                 {msg.content}
               </div>
@@ -392,20 +391,18 @@ export default function Home() {
 
         <form
           onSubmit={handleSubmit}
-          className={`p-3 border-t border-gray-200 flex gap-2 transition-opacity ${
-            loading ? "opacity-50" : ""
-          }`}
-          aria-disabled={loading}
+          className={`p-3 border-t border-gray-200 flex gap-2 transition-opacity ${loading ? "opacity-50" : ""
+            }`}
+          aria-busy={loading}
         >
           <button
             type="button"
             onClick={toggleListening}
             disabled={loading}
-            className={`rounded-full w-10 h-10 flex items-center justify-center text-lg shrink-0 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-              listening
+            className={`rounded-full w-10 h-10 flex items-center justify-center text-lg shrink-0 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${listening
                 ? "bg-red-500 text-white animate-pulse"
                 : "bg-gray-100 text-gray-500 hover:bg-gray-200 disabled:hover:bg-gray-100"
-            }`}
+              }`}
           >
             🎤
           </button>
@@ -417,8 +414,8 @@ export default function Home() {
               loading
                 ? "話し終わるまで入力できません…"
                 : listening
-                ? "聞いています..."
-                : "メッセージを入力..."
+                  ? "聞いています..."
+                  : "メッセージを入力..."
             }
             className="flex-1 rounded-full border border-gray-300 bg-gray-50 px-4 py-2 text-base text-gray-900 placeholder-gray-400 outline-none focus:border-blue-400 focus:bg-white disabled:cursor-not-allowed disabled:bg-gray-100"
             disabled={loading}
