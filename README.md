@@ -65,7 +65,7 @@ GEMINI_API_KEY=your_api_key_here
 # VOICEVOX_URL=http://<WindowsのIP>:50021
 ```
 
-LLM には Gemini 2.5 Flash-Lite（`gemini-2.5-flash-lite`）を使用する。`GEMINI_API_KEY` が必須。
+LLM は `OLLAMA_URL` があれば先に Ollama。死んでいたら Gemini 2.5 Flash-Lite。`GEMINI_API_KEY` は保険として必須。
 
 ### 5. VOICEVOX の起動
 

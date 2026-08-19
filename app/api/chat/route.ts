@@ -3,6 +3,15 @@ import { GoogleGenAI } from "@google/genai";
 import { getRandomFallback, getRandomInterrupted } from "@/lib/fallbackResponses";
 import { createFallbackStream } from "@/lib/chatStream";
 import { detectInjection, getRandomDeflection } from "@/lib/promptGuard";
+import {
+  chooseProvider,
+  isOllamaConfigured,
+  ollamaBaseUrl,
+  ollamaModel,
+  probeOllama,
+  openOllamaStream,
+  isOllamaDeadError,
+} from "@/lib/ollama";
 
 const SYSTEM_PROMPT = `あなたは「夜泊 聖華（よどまり せいか）」というキャラクターです。以下の設定になりきって、文化祭のデモ展示でAITuberとして来場者と会話してください。
 
@@ -128,34 +137,54 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-    const history = messages.slice(0, -1).map((m) => ({
-      role: m.role === "user" ? "user" : "model",
-      parts: [{ text: m.content }],
-    }));
+    const configured = isOllamaConfigured();
+    const alive = configured ? await probeOllama(ollamaBaseUrl()) : false;
+    const provider = chooseProvider({ configured, alive });
+    if (configured && provider === "gemini") {
+      console.warn("[chat] Ollama dead, falling back to Gemini");
+    }
+
     const lastMessage = messages[messages.length - 1].content;
-    const chat = ai.chats.create({
-      model: "gemini-2.5-flash-lite",
-      config: {
-        systemInstruction: SYSTEM_PROMPT,
-        tools: [{ googleSearch: {} }],
-      },
-      history,
-    });
+    let source;
+    if (provider === "ollama") {
+      try {
+        source = await openOllamaStream({
+          baseUrl: ollamaBaseUrl(),
+          model: ollamaModel(),
+          system: SYSTEM_PROMPT,
+          messages,
+        });
+      } catch (error) {
+        if (!isOllamaDeadError(error)) throw error;
+        console.warn("[chat] Ollama died on chat, falling back to Gemini");
+        source = await openGeminiStream(messages, lastMessage);
+      }
+    } else {
+      source = await openGeminiStream(messages, lastMessage);
+    }
 
-    const geminiStream = await chat.sendMessageStream({ message: lastMessage });
-
-    // ストリーム途中での失敗や空応答（レートリミット等）でも、
-    // 何も喋らないと不自然なので定型文でフォローする。
-    // 途中中断（503 等）時はリカバリーのセリフ（getRandomInterrupted）を続けて流す
-    const stream = createFallbackStream(geminiStream, getRandomFallback, getRandomInterrupted);
-
+    const stream = createFallbackStream(source, getRandomFallback, getRandomInterrupted);
     return new Response(stream, { headers: STREAM_HEADERS });
   } catch (e) {
-    // 接続前に失敗するケース（ネットワーク切断・レートリミットでの即時エラー等）。
-    // エラーを返さず、定型文をストリームで返してキャラクターに喋らせる。
     const msg = e instanceof Error ? e.message : String(e);
     console.error("[chat] LLM error, falling back to canned response:", msg);
     return textResponse(getRandomFallback());
   }
+}
+
+async function openGeminiStream(messages: ChatMessage[], lastMessage: string) {
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+  const history = messages.slice(0, -1).map((m) => ({
+    role: m.role === "user" ? "user" : "model",
+    parts: [{ text: m.content }],
+  }));
+  const chat = ai.chats.create({
+    model: "gemini-2.5-flash-lite",
+    config: {
+      systemInstruction: SYSTEM_PROMPT,
+      tools: [{ googleSearch: {} }],
+    },
+    history,
+  });
+  return chat.sendMessageStream({ message: lastMessage });
 }
