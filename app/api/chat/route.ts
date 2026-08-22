@@ -12,6 +12,13 @@ import {
   openOllamaStream,
   isOllamaDeadError,
 } from "@/lib/ollama";
+import {
+  isNimConfigured,
+  isNimDeadError,
+  nimBaseUrl,
+  nimModel,
+  openNimStream,
+} from "@/lib/nim";
 
 const SYSTEM_PROMPT = `あなたは「夜泊 聖華（よどまり せいか）」というキャラクターです。以下の設定になりきって、文化祭のデモ展示でAITuberとして来場者と会話してください。
 
@@ -137,11 +144,12 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const configured = isOllamaConfigured();
-    const alive = configured ? await probeOllama(ollamaBaseUrl()) : false;
-    const provider = chooseProvider({ configured, alive });
-    if (configured && provider === "gemini") {
-      console.warn("[chat] Ollama dead, falling back to Gemini");
+    const ollamaConfigured = isOllamaConfigured();
+    const ollamaAlive = ollamaConfigured ? await probeOllama(ollamaBaseUrl()) : false;
+    const nimConfigured = isNimConfigured();
+    const provider = chooseProvider({ ollamaConfigured, ollamaAlive, nimConfigured });
+    if (ollamaConfigured && provider !== "ollama") {
+      console.warn(`[chat] Ollama dead, falling back to ${provider}`);
     }
 
     const lastMessage = messages[messages.length - 1].content;
@@ -156,9 +164,11 @@ export async function POST(req: NextRequest) {
         });
       } catch (error) {
         if (!isOllamaDeadError(error)) throw error;
-        console.warn("[chat] Ollama died on chat, falling back to Gemini");
-        source = await openGeminiStream(messages, lastMessage);
+        console.warn("[chat] Ollama died on chat, falling back");
+        source = await openNimOrGemini(messages, lastMessage, nimConfigured);
       }
+    } else if (provider === "nim") {
+      source = await openNimOrGemini(messages, lastMessage, true);
     } else {
       source = await openGeminiStream(messages, lastMessage);
     }
@@ -170,6 +180,29 @@ export async function POST(req: NextRequest) {
     console.error("[chat] LLM error, falling back to canned response:", msg);
     return textResponse(getRandomFallback());
   }
+}
+
+async function openNimOrGemini(
+  messages: ChatMessage[],
+  lastMessage: string,
+  nimConfigured: boolean,
+) {
+  if (nimConfigured) {
+    const apiKey = String(process.env.NVIDIA_API_KEY || "").trim();
+    try {
+      return await openNimStream({
+        apiKey,
+        baseUrl: nimBaseUrl(),
+        model: nimModel(),
+        system: SYSTEM_PROMPT,
+        messages,
+      });
+    } catch (error) {
+      if (!isNimDeadError(error)) throw error;
+      console.warn("[chat] NVIDIA NIM failed, falling back to Gemini");
+    }
+  }
+  return openGeminiStream(messages, lastMessage);
 }
 
 async function openGeminiStream(messages: ChatMessage[], lastMessage: string) {

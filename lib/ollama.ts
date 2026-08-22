@@ -1,4 +1,4 @@
-export type ProviderName = "ollama" | "gemini";
+export type ProviderName = "ollama" | "nim" | "gemini";
 
 export function isOllamaConfigured(env: Record<string, string | undefined> = process.env): boolean {
   return Boolean(String(env.OLLAMA_URL || "").trim());
@@ -22,8 +22,13 @@ export function isOllamaDeadError(error: unknown): boolean {
   return /fetch failed|ECONNREFUSED|ETIMEDOUT|network|socket/i.test(message);
 }
 
-export function chooseProvider(input: { configured: boolean; alive: boolean }): ProviderName {
-  if (input.configured && input.alive) return "ollama";
+export function chooseProvider(input: {
+  ollamaConfigured: boolean;
+  ollamaAlive: boolean;
+  nimConfigured: boolean;
+}): ProviderName {
+  if (input.ollamaConfigured && input.ollamaAlive) return "ollama";
+  if (input.nimConfigured) return "nim";
   return "gemini";
 }
 

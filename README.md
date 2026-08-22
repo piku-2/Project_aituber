@@ -12,7 +12,8 @@ Live2D キャラクターが VOICEVOX で喋る AITuber チャットボット。
 | Node.js 18以上 | Next.js の実行 | https://nodejs.org |
 | VOICEVOX | 音声合成 | https://voicevox.hiroshiba.jp |
 | Live2D Cubism Core JS | Live2D モデル描画 | 下記参照（手動ダウンロード必要） |
-| Gemini API キー | LLM | Google AI Studio で取得 |
+| Gemini API キー | LLM の最後の保険 | Google AI Studio で取得 |
+| NVIDIA API キー | Ollama 不通時の LLM | NVIDIA NIM（任意） |
 
 ---
 
@@ -58,14 +59,22 @@ public/
 プロジェクトルートに `.env.local` を作成する。
 
 ```bash
-# Gemini API キー（必須）
+# Gemini API キー（最後の保険）
 GEMINI_API_KEY=your_api_key_here
+
+# Ollama（生きていれば最優先）
+# OLLAMA_URL=http://100.x.x.x:11434
+# OLLAMA_MODEL=qwen2.5:7b
+
+# NVIDIA NIM（Ollama が死んでいたら次）
+# NVIDIA_API_KEY=nvapi-...
+# NVIDIA_NIM_MODEL=nvidia/nemotron-3.5-lightning-30b-a3b
 
 # VOICEVOX が WSL から直接アクセスできない場合（Windows の IP を指定）
 # VOICEVOX_URL=http://<WindowsのIP>:50021
 ```
 
-LLM は `OLLAMA_URL` があれば先に Ollama。死んでいたら Gemini 2.5 Flash-Lite。`GEMINI_API_KEY` は保険として必須。
+LLM の優先度は **Ollama → NVIDIA NIM → Gemini 2.5 Flash-Lite**。Ollama は `OLLAMA_URL` があり probe が通ったときだけ使う。NIM は `NVIDIA_API_KEY` があるとき。どちらも使えなければ Gemini。定型文フォールバックは全プロバイダ失敗時。
 
 ### 5. VOICEVOX の起動
 
@@ -135,7 +144,7 @@ npm run dev
 | フレームワーク | Next.js 16 (App Router) |
 | 言語 | TypeScript |
 | スタイル | Tailwind CSS |
-| LLM | Gemini 2.5 Flash-Lite（gemini-2.5-flash-lite） |
+| LLM | Ollama → NVIDIA NIM → Gemini 2.5 Flash-Lite |
 | 音声合成 | VOICEVOX（ブラウザから直接呼び出し） |
 | 音声入力 | Web Speech API |
 | Live2D | pixi.js v7 + pixi-live2d-display v0.5.0-beta |
@@ -148,7 +157,7 @@ npm run dev
 app/
   page.tsx              # チャット画面（Live2D + チャット UI）
   api/
-    chat/route.ts       # LLM プロキシ（Gemini）
+    chat/route.ts       # LLM プロキシ（Ollama → NIM → Gemini）
     tts/route.ts        # VOICEVOX プロキシ（未使用・ブラウザ直接呼び出し）
 components/
   Live2DViewer.tsx      # Live2D モデル描画コンポーネント
