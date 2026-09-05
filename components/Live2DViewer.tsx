@@ -28,7 +28,8 @@ function attachMouthDriver(model: any, getMouthValue: () => number) {
     }
   }
   orders.sort((a, b) => a.order - b.order);
-  const innerIndex = orders[0]?.i ?? -1;
+  // Front-most mesh is the closed lips. Extra / inner mouth meshes overlap it as noise.
+  const fadeIndices = orders.slice(0, -1).map((o) => o.i);
 
   const origUpdate = internal.update.bind(internal);
   internal.update = (dt: number, now: number) => {
@@ -38,8 +39,10 @@ function attachMouthDriver(model: any, getMouthValue: () => number) {
     origUpdate(dt, now);
     core.setParameterValueById(MOUTH_PARAM, v);
     core.setParameterValueById(MOUTH_FORM_PARAM, v * 0.55);
-    if (innerIndex >= 0) {
-      core._model.drawables.opacities[innerIndex] *= mouthCavityFade(v);
+    const fade = mouthCavityFade(v);
+    const opacities = core._model.drawables.opacities;
+    for (const i of fadeIndices) {
+      opacities[i] *= fade;
     }
   };
 }
