@@ -81,6 +81,54 @@ function buildTimeline(query: VoicevoxQuery, text: string): { time: number; char
   return timeline;
 }
 
+async function fetchVoicevoxAudio(
+  text: string
+): Promise<{ url: string; query: VoicevoxQuery } | null> {
+  const { speakerId, ...customParams } = voiceConfig;
+
+  const fromEngine = async (base: string) => {
+    const queryRes = await fetch(
+      `${base}/audio_query?text=${encodeURIComponent(text)}&speaker=${speakerId}`,
+      { method: "POST" }
+    );
+    if (!queryRes.ok) return null;
+    const query: VoicevoxQuery = { ...await queryRes.json(), ...customParams };
+    const synthRes = await fetch(`${base}/synthesis?speaker=${speakerId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(query),
+    });
+    if (!synthRes.ok) return null;
+    const blob = await synthRes.blob();
+    return { url: URL.createObjectURL(blob), query };
+  };
+
+  try {
+    const direct = await fromEngine("http://localhost:50021");
+    if (direct) return direct;
+  } catch {
+    /* browser cannot reach VOICEVOX */
+  }
+
+  try {
+    const res = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text.slice(0, 500) }),
+    });
+    if (res.ok) {
+      const data = (await res.json()) as { query: VoicevoxQuery; audio: string };
+      const bytes = Uint8Array.from(atob(data.audio), (c) => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: "audio/wav" });
+      return { url: URL.createObjectURL(blob), query: { ...data.query, ...customParams } };
+    }
+  } catch {
+    /* proxy cannot reach VOICEVOX either */
+  }
+
+  return null;
+}
+
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -113,77 +161,75 @@ export default function Home() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, liveTranscript, speakingContent]);
 
-  async function speak(text: string, onProgress: (partial: string) => void): Promise<void> {
-    // VOICEVOX はブラウザ（Windows 側）から直接叩く。WSL 内のサーバーを経由すると
-    // Windows 上の VOICEVOX に届かないため（詳細は README 参照）
-    const VOICEVOX = "http://localhost:50021";
-    const { speakerId, ...customParams } = voiceConfig;
-    try {
-      const queryRes = await fetch(
-        `${VOICEVOX}/audio_query?text=${encodeURIComponent(text)}&speaker=${speakerId}`,
-        { method: "POST" }
-      );
-      if (!queryRes.ok) return;
-      const query: VoicevoxQuery = { ...await queryRes.json(), ...customParams };
-      const timeline = buildTimeline(query, text);
+  function slowTalkMouth(elapsedMs: number): number {
+    return 0.2 + 0.65 * (0.5 + 0.5 * Math.sin(elapsedMs / 420));
+  }
 
-      const synthRes = await fetch(`${VOICEVOX}/synthesis?speaker=${speakerId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(query),
-      });
-      if (!synthRes.ok) return;
-
-      const blob = await synthRes.blob();
-      const url = URL.createObjectURL(blob);
-
-      await new Promise<void>((resolve) => {
-        const audio = new Audio(url);
-
-        // Web Audio で口パク用の音量分析
-        const audioCtx = new AudioContext();
-        const analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 256;
-        analyser.smoothingTimeConstant = 0.6;
-        const source = audioCtx.createMediaElementSource(audio);
-        source.connect(analyser);
-        analyser.connect(audioCtx.destination);
-        const pcmData = new Uint8Array(analyser.frequencyBinCount);
-        let rafId = 0;
-
-        const updateMouth = () => {
-          analyser.getByteTimeDomainData(pcmData);
-          let sum = 0;
-          for (const v of pcmData) sum += (v - 128) ** 2;
-          const rms = Math.sqrt(sum / pcmData.length) / 128;
-          live2DRef.current?.setMouthValue(Math.min(rms * 8, 1));
-          rafId = requestAnimationFrame(updateMouth);
-        };
-
-        // テキスト同期（タイムライン）
-        audio.addEventListener("timeupdate", () => {
-          const ct = audio.currentTime;
-          let chars = 0;
-          for (const entry of timeline) {
-            if (entry.time <= ct) chars = entry.chars;
-            else break;
-          }
-          onProgress(text.slice(0, chars));
-        });
-
-        const cleanup = () => {
-          cancelAnimationFrame(rafId);
+  function animateMouthUntil(durationMs: number, onTick: (elapsedMs: number) => void): Promise<void> {
+    return new Promise((resolve) => {
+      const start = performance.now();
+      const tick = (now: number) => {
+        const elapsed = now - start;
+        if (elapsed >= durationMs) {
           live2DRef.current?.setMouthValue(0);
-          URL.revokeObjectURL(url);
-          audioCtx.close();
-        };
-        audio.onended = () => { cleanup(); resolve(); };
-        audio.onerror = () => { cleanup(); resolve(); };
-        audio.play().then(() => { rafId = requestAnimationFrame(updateMouth); });
+          resolve();
+          return;
+        }
+        live2DRef.current?.setMouthValue(slowTalkMouth(elapsed));
+        onTick(elapsed);
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+  }
+
+  async function speak(text: string, onProgress: (partial: string) => void): Promise<void> {
+    const synth = await fetchVoicevoxAudio(text);
+
+    if (!synth) {
+      const durationMs = Math.max(500, text.length * 110);
+      await animateMouthUntil(durationMs, (elapsed) => {
+        const chars = Math.min(text.length, Math.ceil((elapsed / durationMs) * text.length));
+        onProgress(text.slice(0, Math.max(1, chars)));
       });
-    } catch (e) {
-      console.error("VOICEVOX error:", e);
+      onProgress(text);
+      return;
     }
+
+    const { url, query } = synth;
+    const timeline = buildTimeline(query, text);
+
+    await new Promise<void>((resolve) => {
+      const audio = new Audio(url);
+      let rafId = 0;
+
+      const updateMouth = () => {
+        live2DRef.current?.setMouthValue(slowTalkMouth(audio.currentTime * 1000));
+        rafId = requestAnimationFrame(updateMouth);
+      };
+
+      audio.addEventListener("timeupdate", () => {
+        const ct = audio.currentTime;
+        let chars = 0;
+        for (const entry of timeline) {
+          if (entry.time <= ct) chars = entry.chars;
+          else break;
+        }
+        onProgress(text.slice(0, chars));
+      });
+
+      const cleanup = () => {
+        cancelAnimationFrame(rafId);
+        live2DRef.current?.setMouthValue(0);
+        URL.revokeObjectURL(url);
+      };
+      audio.onended = () => { cleanup(); resolve(); };
+      audio.onerror = () => { cleanup(); resolve(); };
+      audio.play().then(() => { rafId = requestAnimationFrame(updateMouth); }).catch(() => {
+        cleanup();
+        resolve();
+      });
+    });
   }
 
   async function send(text: string) {

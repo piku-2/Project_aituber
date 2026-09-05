@@ -39,14 +39,14 @@ Live2D モデルの描画には Live2D 公式の Cubism Core JS が必要。
 
 ### 3. Live2D モデルの配置
 
-モデルファイルはライセンスの都合により git に含まれていない。チームから別途入手して配置すること。
+文化祭用モデルは `public/model/` に配置する。`model3.json` はテクスチャフォルダと同じ階層に置き、パスは json 内の `FileReferences` と一致させる。
 
 ```
 public/
-  yachiyo/
-    *.model3.json   ← チームから入手
+  model/
+    *.model3.json
     *.moc3
-    *.8192/
+    *.2048/           ← テクスチャ
     *.physics3.json
     （その他モデルファイル）
 ```
@@ -158,5 +158,5 @@ patches/
   pixi-live2d-display+v0.5.0-beta.patch  # Cubism Core 6 対応パッチ
 public/
   live2dcubismcore.min.js  # Live2D Cubism Core（手動配置）
-  yachiyo/                 # Live2D モデルファイル
+  model/                   # Live2D モデルファイル
 ```

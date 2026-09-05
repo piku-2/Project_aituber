@@ -1,8 +1,22 @@
+import { readFile } from "node:fs/promises";
 import { NextRequest, NextResponse } from "next/server";
 import { voiceConfig } from "@/lib/voiceConfig";
 
-const VOICEVOX_URL = process.env.VOICEVOX_URL ?? "http://localhost:50021";
 const MAX_TEXT_LENGTH = 500;
+
+async function voicevoxBases(): Promise<string[]> {
+  const urls = [process.env.VOICEVOX_URL ?? "http://localhost:50021"];
+  try {
+    const resolv = await readFile("/etc/resolv.conf", "utf8");
+    const match = resolv.match(/^nameserver\s+(\S+)/m);
+    if (match && !["127.0.0.1", "::1"].includes(match[1])) {
+      urls.push(`http://${match[1]}:50021`);
+    }
+  } catch {
+    /* not WSL / no resolv.conf */
+  }
+  return [...new Set(urls)];
+}
 
 export async function POST(req: NextRequest) {
   let text: unknown;
@@ -16,37 +30,39 @@ export async function POST(req: NextRequest) {
   }
 
   const { speakerId, ...customParams } = voiceConfig;
+  const bases = await voicevoxBases();
+  let lastError = "voicevox unreachable";
 
-  // VOICEVOX が起動していない・到達できない場合も 500 にせず 502 を返し、
-  // クライアント側は音声なしでテキスト表示だけ続行できるようにする
-  try {
-    const queryRes = await fetch(
-      `${VOICEVOX_URL}/audio_query?text=${encodeURIComponent(text)}&speaker=${speakerId}`,
-      { method: "POST" }
-    );
-    if (!queryRes.ok) {
-      return NextResponse.json({ error: "audio_query failed" }, { status: 502 });
+  for (const base of bases) {
+    try {
+      const queryRes = await fetch(
+        `${base}/audio_query?text=${encodeURIComponent(text)}&speaker=${speakerId}`,
+        { method: "POST" }
+      );
+      if (!queryRes.ok) {
+        lastError = "audio_query failed";
+        continue;
+      }
+
+      const query = { ...(await queryRes.json()), ...customParams };
+
+      const synthRes = await fetch(`${base}/synthesis?speaker=${speakerId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(query),
+      });
+      if (!synthRes.ok) {
+        lastError = "synthesis failed";
+        continue;
+      }
+
+      const audio = Buffer.from(await synthRes.arrayBuffer());
+      return NextResponse.json({ query, audio: audio.toString("base64") });
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e);
     }
-
-    const query = { ...(await queryRes.json()), ...customParams };
-
-    const synthRes = await fetch(`${VOICEVOX_URL}/synthesis?speaker=${speakerId}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(query),
-    });
-    if (!synthRes.ok) {
-      return NextResponse.json({ error: "synthesis failed" }, { status: 502 });
-    }
-
-    // 口パク用タイムラインをクライアントで組み立てるためにクエリも一緒に返す
-    const audio = Buffer.from(await synthRes.arrayBuffer());
-    return NextResponse.json({ query, audio: audio.toString("base64") });
-  } catch (e) {
-    console.error(
-      `[tts] VOICEVOX (${VOICEVOX_URL}) に接続できません:`,
-      e instanceof Error ? e.message : String(e)
-    );
-    return NextResponse.json({ error: "voicevox unreachable" }, { status: 502 });
   }
+
+  console.warn(`[tts] VOICEVOX に接続できません (${bases.join(", ")}): ${lastError}`);
+  return NextResponse.json({ error: "voicevox unreachable" }, { status: 502 });
 }
