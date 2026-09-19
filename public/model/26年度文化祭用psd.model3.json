@@ -1,0 +1,30 @@
+{
+	"Version": 3,
+	"FileReferences": {
+		"Moc": "26年度文化祭用psd.moc3",
+		"Textures": [
+			"26年度文化祭用psd.2048/texture_00.png",
+			"26年度文化祭用psd.2048/texture_01.png"
+		],
+		"Physics": "26年度文化祭用psd.physics3.json",
+		"DisplayInfo": "26年度文化祭用psd.cdi3.json",
+		"MotionSync": "26年度文化祭用psd.motionsync3.json"
+	},
+	"Groups": [
+		{
+			"Target": "Parameter",
+			"Name": "EyeBlink",
+			"Ids": [
+				"ParamEyeLOpen",
+				"ParamEyeROpen"
+			]
+		},
+		{
+			"Target": "Parameter",
+			"Name": "LipSync",
+			"Ids": [
+				"ParamMouthOpenY"
+			]
+		}
+	]
+}
